@@ -100,10 +100,11 @@ _<count> deals across <N> sectors. Coverage window: <start ET> – <end ET>._
 
 ## Output contract
 
-You **must** write exactly two files:
+You **must** write exactly three files:
 
-1. `output/digest.md` — the Slack-mrkdwn digest as described above.
-2. `output/posted.json` — a structured index of every URL referenced in the digest, used for dedup in future runs. Shape:
+1. `output/digest.md` — the Slack-mrkdwn digest as described above (used for archive + dry-run preview).
+2. `output/digest.json` — a Slack Block Kit payload (described in the next section).
+3. `output/posted.json` — a structured index of every URL referenced in the digest, used for dedup in future runs. Shape:
 
    ```json
    {
@@ -122,20 +123,79 @@ You **must** write exactly two files:
    - `first_seen` should be the current UTC timestamp (today's run).
    - `deal_key` is `lowercased_acquirer__lowercased_target`, with non-alphanumeric characters replaced by underscores. The same `deal_key` for multiple URLs of the same deal is correct and expected.
 
+## Block Kit payload — `output/digest.json`
+
+Shape:
+
+```json
+{
+  "main": { "blocks": [ /* up to 50 blocks */ ] },
+  "deals": [
+    { "deal_key": "acquirer__target", "blocks": [ /* one deal's blocks */ ] }
+  ]
+}
+```
+
+`main.blocks` is the single message that will be posted to Slack right now (this phase). `deals[]` is reserved for a future threaded-replies mode — produce it as well so the migration is just a poster swap.
+
+### `main.blocks` structure (in order)
+
+1. **Header** (`type: header`, `plain_text` ≤ 150 chars):
+   `M&A Daily — <Day, Mon DD, YYYY>`
+
+2. **Overview section** (`type: section`, `mrkdwn`, ≤ 3000 chars): one paragraph stating total deal count, sector breakdown, and 1–3 of the largest/most significant deals as `<url|label>` links.
+
+3. **Context block** with sector breakdown elements, e.g. `Tech 4 · Energy 3 · Healthcare 2 · Financials 2 · Industrials 1`.
+
+4. **Divider**.
+
+5. **Per-sector subgroups**, in alphabetical sector order. For each sector:
+   - One **header** block: the sector name (`plain_text`).
+   - For each deal in that sector (largest EV first), emit **two blocks**:
+     a. A **section** block with `fields:` containing 2-column key/value pairs for `*Headline*`, `*Acquirer*`, `*Target*`, `*EV*`, `*Mix*`, `*Premium*`, `*Type*`, `*Geo*`. Use up to 8 fields per section (Slack's max is 10). Each field's `text` ≤ 2000 chars.
+     b. A **section** block with a single `text` `mrkdwn` containing the summary, perspectives, "why it matters" lines, and the source links inline. ≤ 3000 chars total. Format:
+        ```
+        *Summary.* …
+        *Why it matters.* …
+        *Perspectives.* …
+        *Sources:* <url|WSJ> · <url|Reuters> · <url|FT>
+        ```
+   - One **divider** between deals (omit after the last deal in the sector).
+
+6. **Footer context** block with a link to the archive: `Full digest: <{{ARCHIVE_URL}}|archive/{{TODAY}}.md>`.
+
+### Block-count budget
+
+`main.blocks` must contain **≤ 50 blocks** (Slack's hard limit). Rough count: 4 (header/overview/context/divider) + per sector: 1 sector header + 2 blocks per deal + 1 divider per deal-gap + 1 footer ≈ `5 + Σ(sectors)(1 + 3·deals_in_sector)`. With 5 sectors and ~10 total deals, you'll be at ~40 blocks — safe.
+
+If a run has so many deals that you would exceed 50 blocks: keep the top deals (largest EV first across all sectors) and replace the cut deals with one final **context** block reading: `+ N more deals — see <{{ARCHIVE_URL}}|full archive>`. The full digest still goes into `output/digest.md` so nothing is lost from the archive.
+
+### Per-deal block array (`deals[]`)
+
+Even though Phase E only posts `main`, also build `deals[]` with one entry per deal. Each `deals[i].blocks` should be a self-contained 3–5 block array suitable for posting as a standalone Slack message (header + section-with-fields + section-with-summary + context-with-sources). Phase G will use this for threaded replies.
+
+### Slack Block Kit constraints to respect
+
+- `text` strings inside `section.text` ≤ **3000 chars**.
+- `text` strings inside `section.fields[].text` ≤ **2000 chars**.
+- `plain_text` inside `header` ≤ **150 chars**.
+- `section.fields` ≤ **10 elements**.
+- Use `mrkdwn` (Slack dialect) for any `mrkdwn` text fields. Links: `<url|label>`. No `**bold**`, no `# heading`.
+
 ## Review protocol
 
 After producing v1 of both files, invoke the reviewer subagent **exactly once**:
 
-1. Use `Read` to load `prompts/reviewer.md` and `output/digest.md` and `output/posted.json`.
+1. Use `Read` to load `prompts/reviewer.md`, `output/digest.md`, `output/digest.json`, and `output/posted.json`.
 2. Invoke the `Task` tool with a single prompt that contains:
    - The full text of `prompts/reviewer.md`.
-   - A clearly-marked "## Run context" block with the actual values for `TODAY`, `LAST_RUN_TS`, `MODE`, `POSTED_URLS_JSON`, `DRAFT_DIGEST`, `DRAFT_POSTED`.
+   - A clearly-marked "## Run context" block with the actual values for `TODAY`, `LAST_RUN_TS`, `MODE`, `POSTED_URLS_JSON`, `DRAFT_DIGEST`, `DRAFT_DIGEST_JSON`, `DRAFT_POSTED`.
 3. The reviewer will return either `APPROVE` or `REVISE` followed by a bulleted list of specific issues.
 
 **Revision rules:**
 
 - If the response is `APPROVE`, you are done. Do not revise.
-- If the response is `REVISE`, address each listed issue and re-`Write` `output/digest.md` and `output/posted.json` with the corrections. Then **stop** — do not re-invoke the reviewer.
+- If the response is `REVISE`, address each listed issue and re-`Write` `output/digest.md`, `output/digest.json`, and `output/posted.json` with the corrections. Then **stop** — do not re-invoke the reviewer.
 - Hard cap: 2 writer iterations total (initial draft + at most one revision). Do not loop further regardless of remaining issues.
 
-Do not write any other files beyond `output/digest.md` and `output/posted.json`. After the review (and revision if needed), stop.
+Do not write any other files beyond `output/digest.md`, `output/digest.json`, and `output/posted.json`. After the review (and revision if needed), stop.

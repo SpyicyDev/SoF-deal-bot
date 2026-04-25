@@ -68,6 +68,12 @@ def main() -> int:
     entries = posted.get("entries", []) if isinstance(posted, dict) else []
     posted_json = json.dumps(entries, indent=2)
 
+    repo = os.environ.get("GITHUB_REPOSITORY", "OWNER/REPO")
+    default_branch = os.environ.get("DEFAULT_BRANCH", "main")
+    archive_url = (
+        f"https://github.com/{repo}/blob/{default_branch}/archive/{today_str}.md"
+    )
+
     template = TEMPLATE.read_text()
     rendered = (
         template
@@ -75,10 +81,11 @@ def main() -> int:
         .replace("{{MODE}}", mode)
         .replace("{{LAST_RUN_TS}}", last_run_ts)
         .replace("{{POSTED_URLS_JSON}}", posted_json)
+        .replace("{{ARCHIVE_URL}}", archive_url)
     )
     OUTPUT_PROMPT.write_text(rendered)
 
-    emit_github_output(today=today_str, mode=mode, last_run_ts=last_run_ts)
+    emit_github_output(today=today_str, mode=mode, last_run_ts=last_run_ts, archive_url=archive_url)
     print(f"Rendered prompt → {OUTPUT_PROMPT} (mode={mode}, last_run_ts={last_run_ts!r})")
     return 0
 

@@ -11,6 +11,7 @@ The driver agent will inline today's run context here:
 - `MODE`: `daily` or `weekend_wrap`
 - `POSTED_URLS_JSON`: the previously-posted URL list (verbatim)
 - `DRAFT_DIGEST`: the contents of `output/digest.md` (verbatim)
+- `DRAFT_DIGEST_JSON`: the contents of `output/digest.json` (verbatim Block Kit payload)
 - `DRAFT_POSTED`: the contents of `output/posted.json` (verbatim)
 
 ## Checks
@@ -27,7 +28,9 @@ Run **all** of these against the draft:
 
 5. **Tone** — neutral wire-service. Flag hype words ("massive", "stunning", "blockbuster" outside attributed quotes), first-person voice, or unattributed editorializing in fact paragraphs. The "perspectives" and "why it matters" sections may carry analytical framing but must not read as opinion.
 
-6. **Slack mrkdwn correctness** — no GitHub-style headings (`#`), no double-asterisk bold (`**foo**`). Links use `<url|label>` form. Bullets render. Total length ≤ 35,000 characters.
+6. **Slack mrkdwn correctness** — no GitHub-style headings (`#`), no double-asterisk bold (`**foo**`) anywhere in `mrkdwn` text fields. Links use `<url|label>` form. Bullets render. `digest.md` total length ≤ 35,000 characters.
+
+6b. **Block Kit shape** — `digest.json` parses as JSON; `main.blocks` length ≤ 50; every `section.text.text` ≤ 3000 chars; every `section.fields[i].text` ≤ 2000 chars; every `header.text.text` ≤ 150 chars and is `plain_text`; `deals[]` exists with one entry per deal in the digest, each having `deal_key` and `blocks`.
 
 7. **Ordering** — deals are grouped by sector (sectors alphabetical); within a sector, largest EV first.
 

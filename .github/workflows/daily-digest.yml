@@ -46,7 +46,7 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Validate digest
-        run: python3 scripts/validate_digest.py output/digest.md
+        run: python3 scripts/validate_digest.py output/digest.md output/digest.json
 
       - name: Post to Slack
         env:
