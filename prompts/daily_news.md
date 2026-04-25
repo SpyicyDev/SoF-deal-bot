@@ -100,6 +100,26 @@ _<count> deals across <N> sectors. Coverage window: <start ET> – <end ET>._
 
 ## Output contract
 
-You **must** write exactly one file: `output/digest.md`.
+You **must** write exactly two files:
 
-Do not write any other files. Do not invoke the `Task` tool — the reviewer subagent is added in a later phase. After writing the file, stop.
+1. `output/digest.md` — the Slack-mrkdwn digest as described above.
+2. `output/posted.json` — a structured index of every URL referenced in the digest, used for dedup in future runs. Shape:
+
+   ```json
+   {
+     "entries": [
+       {
+         "url": "https://www.reuters.com/...",
+         "first_seen": "2026-04-25T11:02:31Z",
+         "headline": "Acquirer agrees to buy Target for $X.XB",
+         "deal_key": "acquirer__target"
+       }
+     ]
+   }
+   ```
+
+   - Include **every** source URL you cited in the digest (not just the primary one per deal).
+   - `first_seen` should be the current UTC timestamp (today's run).
+   - `deal_key` is `lowercased_acquirer__lowercased_target`, with non-alphanumeric characters replaced by underscores. The same `deal_key` for multiple URLs of the same deal is correct and expected.
+
+Do not write any other files. Do not invoke the `Task` tool — the reviewer subagent is added in a later phase. After writing both files, stop.

@@ -25,6 +25,10 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Capture run start time
+        run: |
+          echo "RUN_START_TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_ENV
+
       - name: Render prompt
         id: ctx
         run: python3 scripts/render_prompt.py
@@ -48,6 +52,28 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: python3 scripts/post_to_slack.py
+
+      - name: Archive digest
+        run: cp output/digest.md "archive/${DIGEST_DATE}.md"
+
+      - name: Update state
+        env:
+          RUN_START_TS: ${{ env.RUN_START_TS }}
+          RUN_MODE: ${{ steps.ctx.outputs.mode }}
+        run: python3 scripts/update_state.py
+
+      - name: Commit state + archive
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add archive/ state/
+          if git diff --cached --quiet; then
+            echo "No state changes to commit."
+            exit 0
+          fi
+          git commit -m "chore(digest): ${DIGEST_DATE}"
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin "HEAD:$GITHUB_REF_NAME"
 
       - name: Open failure issue
         if: failure()
