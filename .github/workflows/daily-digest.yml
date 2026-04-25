@@ -1,0 +1,46 @@
+name: SoF Daily M&A Digest
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 7am ET during EDT (Mar–Nov). Phase F adds the EST cron + DST gate.
+    - cron: '0 11 * * 1-5'
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: daily-digest
+  cancel-in-progress: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set DIGEST_DATE
+        run: echo "DIGEST_DATE=$(date -u +%Y-%m-%d)" >> $GITHUB_ENV
+
+      - name: Run Claude Code (writer)
+        uses: anthropics/claude-code-base-action@beta
+        with:
+          prompt_file: prompts/daily_news.md
+          allowed_tools: 'WebSearch,WebFetch,Read,Write,Task'
+          model: claude-sonnet-4-6
+          timeout_minutes: '30'
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Post to Slack
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: python3 scripts/post_to_slack.py
+
+      - name: Open failure issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DIGEST_DATE: ${{ env.DIGEST_DATE }}
+        run: python3 scripts/open_failure_issue.py
