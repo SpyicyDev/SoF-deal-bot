@@ -122,4 +122,20 @@ You **must** write exactly two files:
    - `first_seen` should be the current UTC timestamp (today's run).
    - `deal_key` is `lowercased_acquirer__lowercased_target`, with non-alphanumeric characters replaced by underscores. The same `deal_key` for multiple URLs of the same deal is correct and expected.
 
-Do not write any other files. Do not invoke the `Task` tool — the reviewer subagent is added in a later phase. After writing both files, stop.
+## Review protocol
+
+After producing v1 of both files, invoke the reviewer subagent **exactly once**:
+
+1. Use `Read` to load `prompts/reviewer.md` and `output/digest.md` and `output/posted.json`.
+2. Invoke the `Task` tool with a single prompt that contains:
+   - The full text of `prompts/reviewer.md`.
+   - A clearly-marked "## Run context" block with the actual values for `TODAY`, `LAST_RUN_TS`, `MODE`, `POSTED_URLS_JSON`, `DRAFT_DIGEST`, `DRAFT_POSTED`.
+3. The reviewer will return either `APPROVE` or `REVISE` followed by a bulleted list of specific issues.
+
+**Revision rules:**
+
+- If the response is `APPROVE`, you are done. Do not revise.
+- If the response is `REVISE`, address each listed issue and re-`Write` `output/digest.md` and `output/posted.json` with the corrections. Then **stop** — do not re-invoke the reviewer.
+- Hard cap: 2 writer iterations total (initial draft + at most one revision). Do not loop further regardless of remaining issues.
+
+Do not write any other files beyond `output/digest.md` and `output/posted.json`. After the review (and revision if needed), stop.
