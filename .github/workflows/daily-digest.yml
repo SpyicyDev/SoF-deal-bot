@@ -21,17 +21,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Render prompt
+        id: ctx
+        run: python3 scripts/render_prompt.py
+
       - name: Set DIGEST_DATE
-        run: echo "DIGEST_DATE=$(date -u +%Y-%m-%d)" >> $GITHUB_ENV
+        run: echo "DIGEST_DATE=${{ steps.ctx.outputs.today }}" >> $GITHUB_ENV
 
       - name: Run Claude Code (writer)
         uses: anthropics/claude-code-base-action@beta
         with:
-          prompt_file: prompts/daily_news.md
+          prompt_file: output/prompt.md
           allowed_tools: 'WebSearch,WebFetch,Read,Write,Task'
           model: claude-sonnet-4-6
-          timeout_minutes: '30'
+          timeout_minutes: '40'
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Validate digest
+        run: python3 scripts/validate_digest.py output/digest.md
 
       - name: Post to Slack
         env:
