@@ -2,9 +2,26 @@ name: SoF Daily M&A Digest
 
 on:
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Print digest to job summary; skip Slack + commit.'
+        type: boolean
+        default: false
+      mode:
+        description: 'Coverage mode. Auto-resolves on schedule (Mon = weekend_wrap).'
+        type: choice
+        options:
+          - auto
+          - daily
+          - weekend_wrap
+        default: auto
   schedule:
-    # 7am ET during EDT (Mar–Nov). Phase F adds the EST cron + DST gate.
+    # GitHub cron is UTC. Two crons cover 7am ET across DST:
+    #   11:00 UTC = 7am EDT (Mar–Nov) / 6am EST (Nov–Mar)
+    #   12:00 UTC = 8am EDT (Mar–Nov) / 7am EST (Nov–Mar)
+    # The `gate` job runs dst_gate.py to skip the half that's an hour off.
     - cron: '0 11 * * 1-5'
+    - cron: '0 12 * * 1-5'
 
 permissions:
   contents: write
@@ -15,7 +32,32 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - id: check
+        name: DST gate (skip cron fired outside 7am ET)
+        run: |
+          if [[ "${{ github.event_name }}" != "schedule" ]]; then
+            echo "run=true" >> $GITHUB_OUTPUT
+            echo "Manual dispatch — bypassing gate."
+            exit 0
+          fi
+          if python3 scripts/dst_gate.py; then
+            echo "run=true" >> $GITHUB_OUTPUT
+          else
+            echo "run=false" >> $GITHUB_OUTPUT
+          fi
+
   digest:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -31,12 +73,14 @@ jobs:
 
       - name: Render prompt
         id: ctx
+        env:
+          MODE_INPUT: ${{ inputs.mode == 'auto' && '' || inputs.mode }}
         run: python3 scripts/render_prompt.py
 
       - name: Set DIGEST_DATE
         run: echo "DIGEST_DATE=${{ steps.ctx.outputs.today }}" >> $GITHUB_ENV
 
-      - name: Run Claude Code (writer)
+      - name: Run Claude Code (writer + reviewer)
         uses: anthropics/claude-code-base-action@beta
         with:
           prompt_file: output/prompt.md
@@ -48,21 +92,35 @@ jobs:
       - name: Validate digest
         run: python3 scripts/validate_digest.py output/digest.md output/digest.json
 
+      - name: Dry-run summary
+        if: inputs.dry_run == true
+        run: |
+          {
+            echo "## Dry-run digest preview — ${DIGEST_DATE} (mode: ${{ steps.ctx.outputs.mode }})"
+            echo ""
+            cat output/digest.md
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Dry-run: skipped Slack post, archive, and commit."
+
       - name: Post to Slack
+        if: inputs.dry_run != true
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: python3 scripts/post_to_slack.py
 
       - name: Archive digest
+        if: inputs.dry_run != true
         run: cp output/digest.md "archive/${DIGEST_DATE}.md"
 
       - name: Update state
+        if: inputs.dry_run != true
         env:
           RUN_START_TS: ${{ env.RUN_START_TS }}
           RUN_MODE: ${{ steps.ctx.outputs.mode }}
         run: python3 scripts/update_state.py
 
       - name: Commit state + archive
+        if: inputs.dry_run != true
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

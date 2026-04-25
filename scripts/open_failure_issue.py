@@ -50,7 +50,7 @@ def main() -> int:
     title_date = today or "(date unknown)"
     title = f"Daily digest failed {title_date}"
     body_lines = [
-        f"The scheduled M&A digest run failed.",
+        "The scheduled M&A digest run failed.",
         "",
         f"- Run: {run_url}",
         f"- Commit: `{sha}`",
@@ -59,6 +59,25 @@ def main() -> int:
         "",
         "Open the run link above for full logs.",
     ]
+
+    digest_excerpt_path = os.path.join("output", "digest.md")
+    if os.path.exists(digest_excerpt_path):
+        try:
+            excerpt = open(digest_excerpt_path, encoding="utf-8").read()[:2000]
+            if excerpt.strip():
+                body_lines += [
+                    "",
+                    "<details><summary>Digest excerpt (first 2000 chars)</summary>",
+                    "",
+                    "```",
+                    excerpt,
+                    "```",
+                    "",
+                    "</details>",
+                ]
+        except OSError:
+            pass
+
     body = "\n".join(body_lines)
 
     issue = gh_post(
