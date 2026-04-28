@@ -50,6 +50,35 @@ archive/                              # YYYY-MM-DD.md per run, committed by work
 output/                               # gitignored scratch dir
 ```
 
+## Local testing with [`act`](https://github.com/nektos/act)
+
+The repo ships with an `.actrc`, `.secrets.example`, and event payloads under `.act/` so you can run the workflow locally in Docker without dispatching it from GitHub.
+
+```bash
+# 1. Copy the secrets template and fill in real values.
+cp .secrets.example .secrets
+
+# 2. Run the digest job in dry-run mode (no Slack post, no commit).
+act workflow_dispatch \
+  -W .github/workflows/daily-digest.yml \
+  -e .act/event-dry-run.json \
+  --secret-file .secrets \
+  -j digest
+
+# 3. Just the gate job (verifies DST gate / dispatch bypass in isolation).
+act workflow_dispatch \
+  -W .github/workflows/daily-digest.yml \
+  -e .act/event-dry-run.json \
+  --secret-file .secrets \
+  -j gate
+```
+
+For an end-to-end run that actually posts to Slack and commits state, use `.act/event-full.json`.
+
+The included `.actrc` pins the medium `catthehacker/ubuntu:act-latest` image (~500MB). It has Python 3.12 + Node + curl preinstalled, which is why the workflow doesn't include `actions/setup-python` (system Python is sufficient on GitHub-hosted runners too — they ship Python 3.10+).
+
+Note: act sets `GITHUB_REPOSITORY` from the remote URL rather than `owner/repo`. The render script defensively strips that down, but you can also override it explicitly: `--env GITHUB_REPOSITORY=spyicydev/sof-deal-bot`.
+
 ## Build phases (commit history)
 
 Each phase is a runnable end-to-end version on top of the previous. Walk back through `git log` to inspect the foundation each layer was built on.

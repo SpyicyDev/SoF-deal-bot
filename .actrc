@@ -1,0 +1,6 @@
+# Default to the medium catthehacker image: has python3, git, curl, common
+# build tools. ~500MB. Closer to GitHub-hosted ubuntu-latest than the tiny
+# default node:16 image, without pulling the 17GB "full" variant.
+-P ubuntu-latest=catthehacker/ubuntu:act-latest
+-P ubuntu-22.04=catthehacker/ubuntu:act-22.04
+--container-architecture linux/amd64

@@ -38,9 +38,6 @@ jobs:
       run: ${{ steps.check.outputs.run }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
       - id: check
         name: DST gate (skip cron fired outside 7am ET)
         run: |
@@ -63,10 +60,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
       - name: Capture run start time
         run: |
           echo "RUN_START_TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_ENV
@@ -74,7 +67,7 @@ jobs:
       - name: Render prompt
         id: ctx
         env:
-          MODE_INPUT: ${{ inputs.mode == 'auto' && '' || inputs.mode }}
+          MODE_INPUT: ${{ inputs.mode }}
         run: python3 scripts/render_prompt.py
 
       - name: Set DIGEST_DATE

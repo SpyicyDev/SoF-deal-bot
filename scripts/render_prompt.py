@@ -36,7 +36,8 @@ def load_json(path: pathlib.Path, default):
 
 
 def resolve_mode(today: dt.date, override: str | None) -> str:
-    if override:
+    # Treat "" and "auto" as "auto-resolve based on the day of the week."
+    if override and override != "auto":
         return override
     if today.weekday() == 0:  # Monday
         return "weekend_wrap"
@@ -68,7 +69,12 @@ def main() -> int:
     entries = posted.get("entries", []) if isinstance(posted, dict) else []
     posted_json = json.dumps(entries, indent=2)
 
-    repo = os.environ.get("GITHUB_REPOSITORY", "OWNER/REPO")
+    raw_repo = os.environ.get("GITHUB_REPOSITORY", "OWNER/REPO")
+    # GITHUB_REPOSITORY is normally "owner/repo" on GitHub-hosted runners, but
+    # `act` populates it from the remote URL, which can include scheme/auth.
+    # Strip everything before the last two path segments to recover owner/repo.
+    parts = [p for p in raw_repo.rstrip("/").split("/") if p]
+    repo = "/".join(parts[-2:]) if len(parts) >= 2 else raw_repo
     default_branch = os.environ.get("DEFAULT_BRANCH", "main")
     archive_url = (
         f"https://github.com/{repo}/blob/{default_branch}/archive/{today_str}.md"

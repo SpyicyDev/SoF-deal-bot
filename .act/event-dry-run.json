@@ -1,0 +1,6 @@
+{
+  "inputs": {
+    "dry_run": "true",
+    "mode": "auto"
+  }
+}

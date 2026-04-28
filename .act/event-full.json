@@ -1,0 +1,6 @@
+{
+  "inputs": {
+    "dry_run": "false",
+    "mode": "daily"
+  }
+}
